@@ -7,13 +7,31 @@ import socket
 import sys
 import traceback
 
-from azure import WindowsAzureMissingResourceError
-from azure.storage import BlobService
+try:
+    # New class name in the Azure SDK sometime after v1.0.
+    #
+    # See
+    # https://github.com/Azure/azure-sdk-for-python/blob/master/ChangeLog.txt
+    from azure.common import AzureMissingResourceHttpError
+except ImportError:
+    # Backwards compatbility for older Azure drivers.
+    from azure import WindowsAzureMissingResourceError \
+        as AzureMissingResourceHttpError
+
+try:
+    # New module location sometime after Azure SDK v1.0.
+    #
+    # See
+    # https://github.com/Azure/azure-sdk-for-python/blob/master/ChangeLog.txt
+    from azure.storage.blob import BlobService
+except ImportError:
+    from azure.storage import BlobService
 
 from . import calling_format
 from hashlib import md5
 from urlparse import urlparse
 from wal_e import log_help
+from wal_e import files
 from wal_e.pipeline import get_download_pipeline
 from wal_e.piper import PIPE
 from wal_e.retries import retry, retry_with_count
@@ -201,8 +219,8 @@ def do_lzop_get(creds, url, path, decrypt, do_retry=True):
         del tb
 
     def download():
-        with open(path, 'wb') as decomp_out:
-            with get_download_pipeline(PIPE, decomp_out, decrypt) as pl:
+        with files.DeleteOnError(path) as decomp_out:
+            with get_download_pipeline(PIPE, decomp_out.f, decrypt) as pl:
                 g = gevent.spawn(write_and_return_error, url, conn, pl.stdin)
 
                 try:
@@ -211,7 +229,7 @@ def do_lzop_get(creds, url, path, decrypt, do_retry=True):
                     exc = g.get()
                     if exc is not None:
                         raise exc
-                except WindowsAzureMissingResourceError:
+                except AzureMissingResourceHttpError:
                     # Short circuit any re-try attempts under certain race
                     # conditions.
                     pl.abort()
@@ -223,6 +241,7 @@ def do_lzop_get(creds, url, path, decrypt, do_retry=True):
                         hint=('This can be normal when Postgres is trying '
                               'to detect what timelines are available '
                               'during restoration.'))
+                    decomp_out.remove_regardless = True
                     return False
 
             logger.info(

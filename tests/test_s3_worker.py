@@ -1,9 +1,6 @@
-import os
 import pytest
 
 from wal_e import storage
-from wal_e.blobstore.s3 import Credentials
-from wal_e.blobstore.s3 import do_lzop_get
 from wal_e.worker.s3 import BackupList
 
 from boto.s3.connection import (
@@ -12,6 +9,7 @@ from boto.s3.connection import (
 )
 from s3_integration_help import (
     boto_supports_certs,
+    bucket_name_mangle,
     FreshBucket,
     no_real_s3_credentials,
 )
@@ -27,8 +25,7 @@ def test_301_redirect():
     """Integration test for bucket naming issues this test."""
     import boto.s3.connection
 
-    aws_access_key = os.getenv('AWS_ACCESS_KEY_ID')
-    bucket_name = 'wal-e-test-301-redirect' + aws_access_key.lower()
+    bucket_name = bucket_name_mangle('wal-e-test-301-redirect')
 
     with pytest.raises(boto.exception.S3ResponseError) as e:
         # Just initiating the bucket manipulation API calls is enough
@@ -46,10 +43,8 @@ def test_get_bucket_vs_certs():
     """Integration test for bucket naming issues."""
     import boto.s3.connection
 
-    aws_access_key = os.getenv('AWS_ACCESS_KEY_ID')
-
     # Add dots to try to trip up TLS certificate validation.
-    bucket_name = 'wal-e.test.dots.' + aws_access_key.lower()
+    bucket_name = bucket_name_mangle('wal-e.test.dots', delimiter='.')
 
     with pytest.raises(boto.https_connection.InvalidCertificateException):
         with FreshBucket(bucket_name, calling_format=SubdomainCallingFormat()):
@@ -70,19 +65,3 @@ def test_empty_latest_listing():
         bl = BackupList(fb.conn, layout, False)
         found = list(bl.find_all('LATEST'))
         assert len(found) == 0
-
-
-@pytest.mark.skipif("no_real_s3_credentials()")
-def test_404_termination(tmpdir):
-    bucket_name = 'wal-e-test-404-termination'
-    creds = Credentials(os.getenv('AWS_ACCESS_KEY_ID'),
-                        os.getenv('AWS_SECRET_ACCESS_KEY'))
-
-    with FreshBucket(bucket_name, host='s3.amazonaws.com',
-                     calling_format=OrdinaryCallingFormat()) as fb:
-        fb.create()
-
-        target = unicode(tmpdir.join('target'))
-        ret = do_lzop_get(creds, 's3://' + bucket_name + '/not-exist.lzo',
-                          target, False)
-        assert ret is False

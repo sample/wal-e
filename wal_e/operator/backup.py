@@ -1,10 +1,11 @@
-import sys
-import os
-import json
+import errno
 import functools
 import gevent
 import gevent.pool
 import itertools
+import json
+import os
+import sys
 
 from cStringIO import StringIO
 from wal_e import log_help
@@ -279,8 +280,17 @@ class Backup(object):
                 group.start(other_segment)
                 started += 1
 
-        # Wait for uploads to finish.
-        group.join()
+        try:
+            # Wait for uploads to finish.
+            group.join()
+        except EnvironmentError as e:
+            if e.errno == errno.ENOENT:
+                print e
+                raise UserException(
+                    msg='could not find file for wal-push',
+                    detail=('The operating system reported: {0} {1}'
+                            .format(e.strerror, repr(e.filename))))
+            raise
 
     def wal_restore(self, wal_name, wal_destination, prefetch_max):
         """
@@ -556,7 +566,7 @@ class Backup(object):
 
 
 def start_prefetches(seg, pd, how_many):
-    import daemon
+    from wal_e import pep3143daemon as daemon
 
     split = sys.argv.index('wal-fetch')
     if split < 0:
