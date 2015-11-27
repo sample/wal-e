@@ -225,8 +225,8 @@ class _DeleteFromContext(object):
     def _delete_if_before(self, delete_horizon_segment_number,
                             scanned_segment_number, key, type_of_thing):
         if scanned_segment_number.as_an_integer < \
-            delete_horizon_segment_number.as_an_integer:
-            self._maybe_delete_key(key, type_of_thing)
+           delete_horizon_segment_number.as_an_integer:
+           self._maybe_delete_key(key, type_of_thing)
 
     def _delete_base_backups_before(self, segment_info):
         base_backup_sentinel_depth = self.layout.basebackups().count('/') + 1
